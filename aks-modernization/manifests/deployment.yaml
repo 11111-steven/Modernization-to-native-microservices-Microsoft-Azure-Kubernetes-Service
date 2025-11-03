@@ -1,0 +1,120 @@
+# manifests/deployment.yaml
+
+# Definición del Deployment para REDIS
+# Un Deployment se encarga de mantener un número deseado de copias (pods) de nuestra aplicación funcionando.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-deployment # Nombre del deployment
+spec:
+  replicas: 1 # Una sola copia de Redis
+  selector:
+    matchLabels:
+      app: redis # Este selector conecta el Deployment con los Pods que gestiona
+  template:
+    metadata:
+      labels:
+        app: redis # Los Pods creados tendrán esta etiqueta
+    spec:
+      containers:
+      - name: redis
+        image: redis:alpine # La imagen de Docker a usar (de Docker Hub)
+        ports:
+        - containerPort: 6379 # El puerto que expone el contenedor de Redis
+
+---
+
+# Definición del Service para REDIS
+# Un Service proporciona una dirección de red estable (un nombre DNS interno) para acceder a los Pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service # Nombre del service. El backend usará este nombre para conectarse.
+spec:
+  ports:
+  - port: 6379 # El puerto que expone el Service
+  selector:
+    app: redis # Redirige el tráfico a cualquier Pod con la etiqueta app=redis
+
+---
+
+# Deployment para el BACKEND
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+spec:
+  replicas: 1 # Empezamos con una copia
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: votingappacrsv2510.azurecr.io/voting-app-backend:v1
+        ports:
+        - containerPort: 80
+        env:
+        - name: REDIS_HOST
+          value: "redis-service" # Le decimos al backend que Redis se encuentra en 'redis-service'
+
+---
+
+# Definición del Service para el BACKEND
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  ports:
+  - port: 80
+  selector:
+    app: backend
+
+---
+
+# Deployment para el FRONTEND
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: votingappacrsv2510.azurecr.io/voting-app-frontend:v1
+        ports:
+        - containerPort: 8080
+        env:
+        - name: BACKEND_API_URL
+          value: "http://backend-service" # Le decimos al frontend que la API está en 'http://backend-service'
+
+---
+
+# Service para el FRONTEND
+# Se expone nuestra aplicación a Internet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  # 'LoadBalancer' es el tipo de Service que automáticamente crea un balanceador de carga
+  # en Azure con una dirección IP pública para recibir tráfico externo.
+  type: LoadBalancer
+  ports:
+  - port: 80 # El Load Balancer recibirá tráfico en el puerto 80 (HTTP estándar)
+    targetPort: 8080 # Y lo redirigirá al puerto 8080 de nuestros contenedores frontend
+  selector:
+    app: frontend # Redirige el tráfico a cualquier Pod con la etiqueta app=frontend
